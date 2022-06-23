@@ -26,16 +26,19 @@ SHARED_CACHE_DIR = SCRATCH / "shared_cache"
 
 
 def setup_cache(
-    cache_dir: Path,
+    user_cache_dir: Path,
     framework: SupportedFramework,
     shared_cache_dir: Path = SHARED_CACHE_DIR,
 ) -> None:
     """Set up the cache directory for the given framework. """
 
     if framework == "transformers":
-        setup_huggingface_cache(cache_dir)
+        setup_huggingface_cache(user_cache_dir)
     elif framework == "torchvision":
-        setup_torchvision_cache(cache_dir, shared_cache_dir)
+        user_torchvision_dir = user_cache_dir / "torch"
+        shared_torchvision_dir = shared_cache_dir / "torch"
+
+        setup_torchvision_cache(user_torchvision_dir, shared_torchvision_dir)
     else:
         raise ValueError(f"Unknown framework: {framework}")
 
@@ -45,7 +48,8 @@ def setup_huggingface_cache(cache_dir: Path):
 
 
 def setup_torchvision_cache(
-    user_cache_dir: Path = SCRATCH, shared_cache_dir: Path = SHARED_CACHE_DIR
+    user_cache_dir: Path = SCRATCH / "torch",
+    shared_cache_dir: Path = SHARED_CACHE_DIR / "torch",
 ):
     """ TODO: Setup the torchvision cache.
     
@@ -67,8 +71,6 @@ def setup_torchvision_cache(
     if "TORCH_HOME" not in os.environ:
         # TODO: These changes won't persist. We probably need to add a block of code in .bashrc
         os.environ["TORCH_HOME"] = str(user_cache_dir)
-
-    shared_torchvision_dir = shared_cache_dir / "hub"
 
     delete_broken_symlinks(user_cache_dir)
 
@@ -102,11 +104,35 @@ def delete_broken_symlinks(user_cache_dir: Path):
 def create_links(user_cache_dir: Path, shared_cache_dir: Path):
     """Create symlinks to the shared cache directory in the user cache directory. """
     # For every file in the shared cache dir, create a (symbolic?) link to it in the user cache dir
+    pbar = tqdm()
+
+    def _copy_fn(src: str, dst: str) -> None:
+        # NOTE: This also overwrites the files in the user directory with symlinks to the same files in
+        # the shared directory. We might not necessarily want to do that.
+        # For instance, we might want to do a checksum or something first, to check that they have
+        # exactly the same contents.
+        src_path = Path(src)
+        dst_path = Path(dst)
+        rel_d = dst_path.relative_to(user_cache_dir)
+        rel_s = src_path.relative_to(shared_cache_dir)
+
+        if dst_path.exists():
+            if dst_path.is_symlink():
+                # From a previous run.
+                return
+            # Replace "real" files with symlinks.
+            dst_path.unlink()
+
+        # print(f"Linking {rel_s}")
+        pbar.set_description(f"Linking {rel_s}")
+        pbar.update(1)
+        os.symlink(src, dst)  # Create symlinks instead of copying.
+
     shutil.copytree(
         shared_cache_dir,
         user_cache_dir,
         symlinks=True,
-        copy_function=os.symlink,  # Create symlinks instead of copying.
+        copy_function=_copy_fn,
         dirs_exist_ok=True,
     )
 
@@ -152,10 +178,14 @@ def main():
 
     parser = ArgumentParser()
     parser.add_argument("framework", type=str, default="torchvision")
-    parser.add_argument("user_cache_dir", type=Path, default=SCRATCH)
-    parser.add_argument("shared_cache_dir", type=Path, default=SHARED_CACHE_DIR)
+    parser.add_argument("--user_cache", type=Path, default=DEFAULT_USER_CACHE_DIR)
+    parser.add_argument("--shared_cache", type=Path, default=SHARED_CACHE_DIR)
     args = parser.parse_args()
     framework = args.framework
-    user_cache_dir = args.user_cache_dir
-    shared_cache_dir = args.shared_cache_dir
+    user_cache_dir = args.user_cache
+    shared_cache_dir = args.shared_cache
     setup_cache(user_cache_dir, framework, shared_cache_dir)
+
+
+if __name__ == "__main__":
+    main()
