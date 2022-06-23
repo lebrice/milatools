@@ -1,12 +1,18 @@
-""" IDEA: Create a command that sets up a cache directory on SCRATCH for commonly used libraries,
-e.g. HuggingFace, torchvision, etc.
+""" IDEA: Create a command that sets up a user cache directory for commonly used libraries.
 
-- Also set the environment variables so that this new cache location is used by default by those libraries.
-- The user-specific cache directory should be writeable, and contain some read-only links to the
-  files contained in the "shared" cache directory, managed by the IT/IDT Team at Mila. 
+This can be used to avoid having to download files to the $HOME directory, as well as remove
+duplicated files (e.g. the same file in the shared cache dir and the user cache dir).
+
+The user cache directory should be writeable, and will contain some read-only links to the
+files contained in the "shared" cache directory, (e.g. managed by the IT/IDT Team at Mila).
+
+Also sets the environment variables so that this new cache location is used by default by those
+libraries.
 """
+from __future__ import annotations
+from dataclasses import dataclass
 
-
+import logging
 import shutil
 from typing import Literal
 from pathlib import Path
@@ -14,51 +20,69 @@ import os
 
 from tqdm import tqdm
 from logging import getLogger as get_logger
+from dataclasses import dataclass
+from simple_parsing import ArgumentParser, choice
 
 logger = get_logger(__name__)
-SupportedFramework = Literal["transformers", "torchvision"]
+
+SupportedFramework = Literal["huggingface", "torch", "ALL"]
 
 SCRATCH = Path.home() / "scratch"
 DEFAULT_USER_CACHE_DIR = SCRATCH / ".cache"
-# TODO: Change to an actual directory. Using another dir in my scratch for now.
+# TODO: Change to an actual IDT-approved, read-only directory. Using another dir in my scratch for now.
 # SHARED_CACHE_DIR = Path("/network/shared_cache")
 SHARED_CACHE_DIR = SCRATCH / "shared_cache"
 
 
-def setup_cache(
-    user_cache_dir: Path,
-    framework: SupportedFramework,
-    shared_cache_dir: Path = SHARED_CACHE_DIR,
-) -> None:
-    """Set up the cache directory for the given framework. """
-
-    if framework == "transformers":
-        setup_huggingface_cache(user_cache_dir)
-    elif framework == "torchvision":
-        user_torchvision_dir = user_cache_dir / "torch"
-        shared_torchvision_dir = shared_cache_dir / "torch"
-
-        setup_torchvision_cache(user_torchvision_dir, shared_torchvision_dir)
-    else:
-        raise ValueError(f"Unknown framework: {framework}")
+# IDEA: Could list the files in the shared cache dir, to show the available frameworks!
+# FIXME: When specifying the shared_cache_dir with an argument, setting 'choices' isn't correct,
+# because the actual shared cache_dir that is pointed to by `shared_cache_dir` might have
+# different files than the default shared cache_dir.
+subdirectories = [p.name for p in SHARED_CACHE_DIR.iterdir()]
 
 
-def setup_huggingface_cache(cache_dir: Path):
-    raise NotImplementedError("Setup of huggingface cache is not yet implemented.")
+@dataclass
+class Options:
+    """ Options for the setup_cache command. """
 
+    user_cache_dir: Path = DEFAULT_USER_CACHE_DIR
+    """The user cache directory. Should probably be in $SCRATCH (not $HOME!) """
 
-def setup_torchvision_cache(
-    user_cache_dir: Path = SCRATCH / "torch",
-    shared_cache_dir: Path = SHARED_CACHE_DIR / "torch",
-):
-    """ TODO: Setup the torchvision cache.
+    shared_cache_dir: Path = SHARED_CACHE_DIR
+    """ The path to the shared cache directory.
     
-    1. If the user cache dir doesn't exist, create it.
-    2. Delete all symlinks in the user cache directory that point to files that don't exist anymore
-       in the shared cache directory.
-    3. For every file in the shared cache dir, create a (symbolic?) link to it in the user cache
-       dir.
+    This defaults to the path of the shared cache setup by the IDT team on the Mila cluster.
     """
+
+    framework_subdirectory: str = choice(subdirectories + ["all"], default="all")
+    """The name of a subdirectory of `shared_cache_dir` to link. By default, creates symlinks for
+    every file in the `shared_cache_dir` directory.
+    """
+
+    def __post_init__(self):
+        if self.framework_subdirectory != "all":
+            subdirectories = [p.name for p in self.shared_cache_dir.iterdir()]
+            if self.framework_subdirectory not in subdirectories:
+                raise ValueError(
+                    f"The framework subdirectory '{self.framework_subdirectory}' does not exist in "
+                    f"{self.shared_cache_dir}. \n"
+                    f"Frameworks/subdirectories available in the shared cache: {subdirectories}"
+                )
+
+            self.user_cache_dir = self.user_cache_dir / self.framework_subdirectory
+            self.shared_cache_dir = self.shared_cache_dir / self.framework_subdirectory
+
+
+def setup_cache(user_cache_dir: Path, shared_cache_dir: Path,) -> None:
+    """Set up the user cache directory. 
+
+    1. If the `user_cache_dir` directory doesn't exist, creates it.
+    2. Removes broken symlinks in the user cache directory if they point to files in
+       `shared_cache_dir` that don't exist anymore.
+    3. For every file in the shared cache dir, creates a (symbolic?) link to it in the
+       `user_cache_dir`.
+    """
+
     if not user_cache_dir.exists():
         user_cache_dir.mkdir(parents=True, exist_ok=False)
     if not user_cache_dir.is_dir():
@@ -68,13 +92,23 @@ def setup_torchvision_cache(
             f"The shared cache directory {shared_cache_dir} doesn't exist, or isn't a directory! "
         )
 
-    if "TORCH_HOME" not in os.environ:
-        # TODO: These changes won't persist. We probably need to add a block of code in .bashrc
-        os.environ["TORCH_HOME"] = str(user_cache_dir)
-
-    delete_broken_symlinks(user_cache_dir)
-
+    delete_broken_symlinks_to_shared_cache(user_cache_dir, shared_cache_dir)
     create_links(user_cache_dir, shared_cache_dir)
+
+    set_environment_variables(user_cache_dir)
+
+
+def set_environment_variables(user_cache_dir: Path):
+    """Set the relevant environment variables for each library so they start to use the new cache
+    dir.
+    """
+    # TODO: These changes won't persist. We probably need to add a block of code in .bashrc
+
+    os.environ["TORCH_HOME"] = str(user_cache_dir / "torch")
+    os.environ["HF_HOME"] = str(user_cache_dir / "huggingface")
+    os.environ["TRANSFORMERS_CACHE"] = str(
+        user_cache_dir / "huggingface" / "transformers"
+    )
 
 
 def is_child(path: Path, parent: Path) -> bool:
@@ -88,12 +122,15 @@ def is_child(path: Path, parent: Path) -> bool:
         return False
 
 
-def delete_broken_symlinks(user_cache_dir: Path):
+def delete_broken_symlinks_to_shared_cache(
+    user_cache_dir: Path, shared_cache_dir: Path
+):
     """Delete all symlinks in the user cache directory that point to files that don't exist anymore
     in the shared cache directory. """
     for file in user_cache_dir.rglob("*"):
         if file.is_symlink():
-            if not file.resolve().exists():
+            target = file.resolve()
+            if is_child(target, shared_cache_dir) and not target.exists():
                 logger.debug(f"Removing broken symlink: {file}")
                 if file.is_dir():
                     file.rmdir()
@@ -136,55 +173,16 @@ def create_links(user_cache_dir: Path, shared_cache_dir: Path):
         dirs_exist_ok=True,
     )
 
-    # for shared_path in shared_cache_dir.rglob("*"):
-    #     shared_path_relative = shared_path.relative_to(shared_cache_dir)
-    #     user_path = user_cache_dir / shared_path_relative
-
-    #     if not user_path.exists():
-    #         # Create a link to the shared version of the file.
-    #         user_path.symlink_to(shared_path, target_is_directory=shared_path.is_dir())
-    #         continue
-
-    #     # The file exists.
-
-    #     if user_path.is_symlink():
-    #         # The path is a symlink that points to an existing file/dir in the shared cache dir.
-    #         # (This is true since we purged the dangling symlinks above.)
-    #         continue
-
-    #     # The path is a real file / directory in the user's cache_dir.
-
-    #     # NOTE: While we *could* just go to the next iteration here, since we've done what we
-    #     # wanted to do, it might be a good idea to replace dupliate "real" files in the user cache
-    #     # with symlinks to the same files in the shared cache.
-    #     # Assuming that the datasets / model weights are stored on SCRATCH, I can't think
-    #     # of any reason NOT to do this, since it's just as fast, but will make them use less
-    #     # space.
-    #     if user_path.is_file():
-    #         user_path.symlink_to(shared_path)
-
-    #     elif user_path.is_dir():
-    #         # There is a "real" directory in the user's cache, and we have a directory in the
-    #         # shared cache with the same name. It's important to not just replace the user's dir
-    #         # with a link to the shared dir, since the user's dir may contain files that the shared
-    #         # dir doesn't have!
-    #         # We can probably do nothing here, since we're going to recurse into the other files in
-    #         # that directory anyway.
-    #         pass
-
 
 def main():
-    from argparse import ArgumentParser
 
-    parser = ArgumentParser()
-    parser.add_argument("framework", type=str, default="torchvision")
-    parser.add_argument("--user_cache", type=Path, default=DEFAULT_USER_CACHE_DIR)
-    parser.add_argument("--shared_cache", type=Path, default=SHARED_CACHE_DIR)
+    parser = ArgumentParser(description=__doc__)
+    parser.add_arguments(Options, dest="options")
+
     args = parser.parse_args()
-    framework = args.framework
-    user_cache_dir = args.user_cache
-    shared_cache_dir = args.shared_cache
-    setup_cache(user_cache_dir, framework, shared_cache_dir)
+
+    options: Options = args.options
+    setup_cache(options.user_cache_dir, options.shared_cache_dir)
 
 
 if __name__ == "__main__":

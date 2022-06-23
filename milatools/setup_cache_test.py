@@ -6,7 +6,7 @@ import pytest
 import torchvision
 from torchvision.models import resnet18
 
-from milatools.setup_cache import setup_torchvision_cache, create_links
+from milatools.setup_cache import create_links
 
 
 def create_dummy_dir_tree(
@@ -97,14 +97,13 @@ library_function_to_created_files = {
 }
 
 
-from .setup_cache import setup_torchvision_cache
-
-
 def get_all_files_in_dir(dir_path: Path) -> list[Path]:
     return [p.relative_to(dir_path) for p in dir_path.glob("**/*") if not p.is_dir()]
 
 
 class TestTorchvision:
+    """ TODO: Add more tests specific to each library. """
+
     def test_cant_write_to_shared_cache_dir(
         self, empty_shared_cache_dir: Path, monkeypatch
     ):
@@ -128,4 +127,3 @@ class TestTorchvision:
         assert get_all_files_in_dir(tmp_path) == [
             Path("hub") / "checkpoints" / "resnet18-f37072fd.pth"
         ]
-
