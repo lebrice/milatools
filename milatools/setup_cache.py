@@ -1,7 +1,7 @@
 """ IDEA: Create a command that sets up a user cache directory for commonly used libraries.
 
 This can be used to avoid having to download files to the $HOME directory, as well as remove
-duplicated files (e.g. the same file in the shared cache dir and the user cache dir).
+duplicated downloads to free up space.
 
 The user cache directory should be writeable, and will contain some read-only links to the
 files contained in the "shared" cache directory, (e.g. managed by the IT/IDT Team at Mila).
@@ -10,18 +10,17 @@ Also sets the environment variables so that this new cache location is used by d
 libraries.
 """
 from __future__ import annotations
-from dataclasses import dataclass
 
 import logging
-import shutil
-from typing import Literal
-from pathlib import Path
 import os
-
-from tqdm import tqdm
-from logging import getLogger as get_logger
+import shutil
 from dataclasses import dataclass
+from logging import getLogger as get_logger
+from pathlib import Path
+from typing import Literal
+
 from simple_parsing import ArgumentParser, choice
+from tqdm import tqdm
 
 logger = get_logger(__name__)
 
@@ -32,13 +31,6 @@ DEFAULT_USER_CACHE_DIR = SCRATCH / ".cache"
 # TODO: Change to an actual IDT-approved, read-only directory. Using another dir in my scratch for now.
 # SHARED_CACHE_DIR = Path("/network/shared_cache")
 SHARED_CACHE_DIR = SCRATCH / "shared_cache"
-
-
-# IDEA: Could list the files in the shared cache dir, to show the available frameworks!
-# FIXME: When specifying the shared_cache_dir with an argument, setting 'choices' isn't correct,
-# because the actual shared cache_dir that is pointed to by `shared_cache_dir` might have
-# different files than the default shared cache_dir.
-subdirectories = [p.name for p in SHARED_CACHE_DIR.iterdir()]
 
 
 @dataclass
@@ -54,19 +46,25 @@ class Options:
     This defaults to the path of the shared cache setup by the IDT team on the Mila cluster.
     """
 
-    framework_subdirectory: str = choice(subdirectories + ["all"], default="all")
+    # IDEA: Could list the files in the shared cache dir, to show the available frameworks!
+    # FIXME: When specifying the shared_cache_dir with an argument, setting 'choices' isn't correct,
+    # because the actual shared cache_dir that is pointed to by `shared_cache_dir` might have
+    # different files than the default shared cache_dir.
+    framework_subdirectory: str = choice(
+        [p.name for p in SHARED_CACHE_DIR.iterdir()] + ["all"], default="all"
+    )
     """The name of a subdirectory of `shared_cache_dir` to link. By default, creates symlinks for
     every file in the `shared_cache_dir` directory.
     """
 
     def __post_init__(self):
         if self.framework_subdirectory != "all":
-            subdirectories = [p.name for p in self.shared_cache_dir.iterdir()]
-            if self.framework_subdirectory not in subdirectories:
+            available_subdirectories = [p.name for p in self.shared_cache_dir.iterdir()]
+            if self.framework_subdirectory not in available_subdirectories:
                 raise ValueError(
                     f"The framework subdirectory '{self.framework_subdirectory}' does not exist in "
                     f"{self.shared_cache_dir}. \n"
-                    f"Frameworks/subdirectories available in the shared cache: {subdirectories}"
+                    f"Frameworks/subdirectories available in the shared cache: {available_subdirectories}"
                 )
 
             self.user_cache_dir = self.user_cache_dir / self.framework_subdirectory
