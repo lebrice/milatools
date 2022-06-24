@@ -1,13 +1,18 @@
-""" IDEA: Create a command that sets up a user cache directory for commonly used libraries.
+"""Sets up a user cache directory for commonly used libraries, while reusing shared cache entries.
 
-This can be used to avoid having to download files to the $HOME directory, as well as remove
-duplicated downloads to free up space.
+Use this to avoid having to download files to the $HOME directory, as well as to remove
+duplicated downloads and free up space in your $HOME and $SCRATCH directories.
 
-The user cache directory should be writeable, and will contain some read-only links to the
-files contained in the "shared" cache directory, (e.g. managed by the IT/IDT Team at Mila).
+The user cache directory should be writeable, and doesn't need to be empty.
+This command adds symlinks to (some of) the files contained in the *shared* cache directory to this
+user cache directory.
 
-Also sets the environment variables so that this new cache location is used by default by those
-libraries.
+The shared cache directory should be readable (e.g. a directory containing frequently-downloaded
+weights/checkpoints, managed by the IT/IDT Team at Mila).
+
+TODO:
+This command also sets the environment variables via a block in the `$HOME/.bashrc` file, so that
+these libraries look in the specified user cache for these files.
 """
 from __future__ import annotations
 
@@ -19,7 +24,6 @@ from logging import getLogger as get_logger
 from pathlib import Path
 from typing import Literal
 
-from simple_parsing import ArgumentParser, choice
 from tqdm import tqdm
 
 logger = get_logger(__name__)
@@ -46,15 +50,9 @@ class Options:
     This defaults to the path of the shared cache setup by the IDT team on the Mila cluster.
     """
 
-    # IDEA: Could list the files in the shared cache dir, to show the available frameworks!
-    # FIXME: When specifying the shared_cache_dir with an argument, setting 'choices' isn't correct,
-    # because the actual shared cache_dir that is pointed to by `shared_cache_dir` might have
-    # different files than the default shared cache_dir.
-    framework_subdirectory: str = choice(
-        [p.name for p in SHARED_CACHE_DIR.iterdir()] + ["all"], default="all"
-    )
-    """The name of a subdirectory of `shared_cache_dir` to link. By default, creates symlinks for
-    every file in the `shared_cache_dir` directory.
+    framework_subdirectory: str = "all"
+    """The name of a subdirectory of `shared_cache_dir` to link, or 'all' to create symlinks for
+    every file in `shared_cache_dir`. Defaults to 'all'.
     """
 
     def __post_init__(self):
@@ -173,6 +171,8 @@ def create_links(user_cache_dir: Path, shared_cache_dir: Path):
 
 
 def main():
+
+    from simple_parsing import ArgumentParser, choice
 
     parser = ArgumentParser(description=__doc__)
     parser.add_arguments(Options, dest="options")
