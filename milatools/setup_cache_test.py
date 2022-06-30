@@ -1,12 +1,13 @@
 from __future__ import annotations
 import os
 from pathlib import Path
+import textwrap
 from typing import Callable
 import pytest
 import torchvision
 from torchvision.models import resnet18
 
-from milatools.setup_cache import create_links
+from milatools.setup_cache import add_block_to_bashrc_file, create_links
 
 
 def create_dummy_dir_tree(
@@ -59,6 +60,87 @@ def test_create_links(tmp_path: Path):
         assert new_symlink_location.is_symlink()
         assert new_symlink_location.resolve() == target
         assert new_symlink_location.read_text() == shared_file_contents[target]
+
+
+import time
+
+expected_block = """\
+# >>> shared cache setup >>>
+# !! Contents within this block are managed by the `setup_cache` script !!
+export TORCH_HOME={user_cache_dir}/torch
+export HF_HOME={user_cache_dir}/huggingface
+export TRANSFORMERS_CACHE={user_cache_dir}/huggingface/transformers
+# <<< shared cache setup <<<
+"""
+
+
+def test_add_block_to_bashrc(tmp_path: Path):
+    user_cache_dir = tmp_path / "fake_user_cache"
+    user_cache_dir.mkdir()
+
+    bashrc_file = tmp_path / ".bashrc"
+
+    example_dummy_bashrc_content = textwrap.dedent(
+        """\
+        ## ~/.bashrc: executed by bash(1) for non-login shells.
+        # see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
+        # for examples
+
+        # >>> conda initialize >>>
+        # !! Contents within this block are managed by 'conda init' !!
+        __conda_setup="$('/cvmfs/ai.mila.quebec/apps/x86_64/debian/anaconda/3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+        if [ $? -eq 0 ]; then
+            eval "$__conda_setup"
+        else
+            if [ -f "/cvmfs/ai.mila.quebec/apps/x86_64/debian/anaconda/3/etc/profile.d/conda.sh" ]; then
+                . "/cvmfs/ai.mila.quebec/apps/x86_64/debian/anaconda/3/etc/profile.d/conda.sh"
+            else
+                export PATH="/cvmfs/ai.mila.quebec/apps/x86_64/debian/anaconda/3/bin:$PATH"
+            fi
+        fi
+        unset __conda_setup
+        # <<< conda initialize <<<
+
+        #export LD_LIBRARY_PATH=:/home/ml/normandf/.mjpro131/mjpro131/bin
+        export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/mila/n/normandf/.mujoco/mujoco200/bin
+        export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/nvidia-384/lib
+        """
+    )
+    expected_bashrc_content = (
+        example_dummy_bashrc_content
+        + "\n"
+        + expected_block.format(user_cache_dir=user_cache_dir)
+    )
+    bashrc_file.write_text(example_dummy_bashrc_content)
+
+    add_block_to_bashrc_file(bashrc_file, user_cache_dir=user_cache_dir)
+
+    actual_bashrc_content = bashrc_file.read_text()
+    assert actual_bashrc_content == expected_bashrc_content
+
+
+def test_using_symlink_updates_target_file_usage_stats(tmp_path: Path):
+    target_file = tmp_path / "target.txt"
+    target_file.write_text("Hello there, I'm bob.")
+    target_first_access_time = target_file.stat().st_atime
+    print(target_first_access_time)
+
+    symlink_file = tmp_path / "symlink.txt"
+    symlink_file.symlink_to(target_file)
+    symlink_first_access_time = symlink_file.stat().st_atime
+    print(symlink_first_access_time)
+
+    time.sleep(1)
+
+    _ = symlink_file.read_text()
+
+    symlink_last_access_time = symlink_file.stat().st_atime
+    target_last_access_time = target_file.stat().st_atime
+
+    assert symlink_last_access_time > symlink_first_access_time
+    assert target_last_access_time > target_first_access_time
+    # Reading the symlink should also update when the target was read for the last time.
+    assert target_last_access_time == symlink_last_access_time
 
 
 @pytest.fixture

@@ -22,54 +22,22 @@ import shutil
 from dataclasses import dataclass
 from logging import getLogger as get_logger
 from pathlib import Path
-from typing import Literal
-
+import warnings
+from simple_parsing import ArgumentParser
 from tqdm import tqdm
 
 logger = get_logger(__name__)
 
-SupportedFramework = Literal["huggingface", "torch", "ALL"]
+HOME = Path.home()
+SCRATCH = HOME / "scratch"
+DEFAULT_USER_CACHE_DIR = HOME / ".cache"
 
-SCRATCH = Path.home() / "scratch"
-DEFAULT_USER_CACHE_DIR = SCRATCH / ".cache"
 # TODO: Change to an actual IDT-approved, read-only directory. Using another dir in my scratch for now.
 # SHARED_CACHE_DIR = Path("/network/shared_cache")
 SHARED_CACHE_DIR = SCRATCH / "shared_cache"
 
 
-@dataclass
-class Options:
-    """ Options for the setup_cache command. """
-
-    user_cache_dir: Path = DEFAULT_USER_CACHE_DIR
-    """The user cache directory. Should probably be in $SCRATCH (not $HOME!) """
-
-    shared_cache_dir: Path = SHARED_CACHE_DIR
-    """ The path to the shared cache directory.
-    
-    This defaults to the path of the shared cache setup by the IDT team on the Mila cluster.
-    """
-
-    framework_subdirectory: str = "all"
-    """The name of a subdirectory of `shared_cache_dir` to link, or 'all' to create symlinks for
-    every file in `shared_cache_dir`. Defaults to 'all'.
-    """
-
-    def __post_init__(self):
-        if self.framework_subdirectory != "all":
-            available_subdirectories = [p.name for p in self.shared_cache_dir.iterdir()]
-            if self.framework_subdirectory not in available_subdirectories:
-                raise ValueError(
-                    f"The framework subdirectory '{self.framework_subdirectory}' does not exist in "
-                    f"{self.shared_cache_dir}. \n"
-                    f"Frameworks/subdirectories available in the shared cache: {available_subdirectories}"
-                )
-
-            self.user_cache_dir = self.user_cache_dir / self.framework_subdirectory
-            self.shared_cache_dir = self.shared_cache_dir / self.framework_subdirectory
-
-
-def setup_cache(user_cache_dir: Path, shared_cache_dir: Path,) -> None:
+def setup_cache(user_cache_dir: Path, shared_cache_dir: Path) -> None:
     """Set up the user cache directory. 
 
     1. If the `user_cache_dir` directory doesn't exist, creates it.
@@ -88,9 +56,18 @@ def setup_cache(user_cache_dir: Path, shared_cache_dir: Path,) -> None:
             f"The shared cache directory {shared_cache_dir} doesn't exist, or isn't a directory! "
         )
 
+    if _is_child(user_cache_dir, HOME):
+        warnings.warn(
+            f"Using the default value for user_cache_dir ({user_cache_dir}), which is in your "
+            f"home directory!\n"
+            f"This isn't ideal, as downloading a model that isn't in the shared cache will take "
+            f"up space in your home directory, which has limited capacity and poor access times.\n"
+            f"It is recommended that you create a cache directory in the SCRATCH filesystem, and "
+            f"set the relevant environment variables to point to that directory, e.g.:\n"
+        )
+
     delete_broken_symlinks_to_shared_cache(user_cache_dir, shared_cache_dir)
     create_links(user_cache_dir, shared_cache_dir)
-
     set_environment_variables(user_cache_dir)
 
 
@@ -99,7 +76,6 @@ def set_environment_variables(user_cache_dir: Path):
     dir.
     """
     # TODO: These changes won't persist. We probably need to add a block of code in .bashrc
-
     os.environ["TORCH_HOME"] = str(user_cache_dir / "torch")
     os.environ["HF_HOME"] = str(user_cache_dir / "huggingface")
     os.environ["TRANSFORMERS_CACHE"] = str(
@@ -107,7 +83,31 @@ def set_environment_variables(user_cache_dir: Path):
     )
 
 
-def is_child(path: Path, parent: Path) -> bool:
+def add_block_to_bashrc_file(bashrc_file: Path, user_cache_dir: Path) -> None:
+    """ Add or modify the block of code in the bashrc file that sets the environment variables. """
+    start_token = "# >>> shared cache setup >>>"
+    end_token = "# <<< shared cache setup <<<"
+    block_lines = [
+        "# !! Contents within this block are managed by the `setup_cache` script !!",
+        f"export TORCH_HOME={user_cache_dir}/torch",
+        f"export HF_HOME={user_cache_dir}/huggingface",
+        f"export TRANSFORMERS_CACHE={user_cache_dir}/huggingface/transformers",
+    ]
+
+    file_lines = bashrc_file.read_text().splitlines()
+    block_exists = start_token in file_lines
+
+    if not block_exists:
+        new_file_lines = ["", start_token, *block_lines, end_token, ""]
+        with open(bashrc_file, "a") as f:
+            f.write("\n".join(new_file_lines))
+    else:
+        raise NotImplementedError(
+            f"Insert / replace the contents of the block in {bashrc_file}"
+        )
+
+
+def _is_child(path: Path, parent: Path) -> bool:
     """Return True if the path is under the parent directory."""
     if path == parent:
         return False
@@ -126,7 +126,7 @@ def delete_broken_symlinks_to_shared_cache(
     for file in user_cache_dir.rglob("*"):
         if file.is_symlink():
             target = file.resolve()
-            if is_child(target, shared_cache_dir) and not target.exists():
+            if _is_child(target, shared_cache_dir) and not target.exists():
                 logger.debug(f"Removing broken symlink: {file}")
                 if file.is_dir():
                     file.rmdir()
@@ -170,16 +170,50 @@ def create_links(user_cache_dir: Path, shared_cache_dir: Path):
     )
 
 
+_ALL = "all"
+
+
+@dataclass
+class Options:
+    """ Options for the setup_cache command. """
+
+    user_cache_dir: Path = DEFAULT_USER_CACHE_DIR
+    """The user cache directory. Should probably be in $SCRATCH (not $HOME!) """
+
+    shared_cache_dir: Path = SHARED_CACHE_DIR
+    """ The path to the shared cache directory.
+    
+    This defaults to the path of the shared cache setup by the IDT team on the Mila cluster.
+    """
+
+    framework_subdirectory: str = _ALL
+    """The name of a subdirectory of `shared_cache_dir` to link, or 'all' to create symlinks for
+    every file in `shared_cache_dir`. Defaults to 'all'.
+    """
+
+
 def main():
-
-    from simple_parsing import ArgumentParser, choice
-
     parser = ArgumentParser(description=__doc__)
     parser.add_arguments(Options, dest="options")
 
     args = parser.parse_args()
 
     options: Options = args.options
+
+    if options.framework_subdirectory != _ALL:
+        available_subdirectories = [p.name for p in options.shared_cache_dir.iterdir()]
+        if options.framework_subdirectory not in available_subdirectories:
+            raise ValueError(
+                f"The framework subdirectory '{options.framework_subdirectory}' does not exist in "
+                f"{options.shared_cache_dir}. \n"
+                f"Frameworks/subdirectories available in the shared cache: {available_subdirectories}"
+            )
+
+        options.user_cache_dir = options.user_cache_dir / options.framework_subdirectory
+        options.shared_cache_dir = (
+            options.shared_cache_dir / options.framework_subdirectory
+        )
+
     setup_cache(options.user_cache_dir, options.shared_cache_dir)
 
 
