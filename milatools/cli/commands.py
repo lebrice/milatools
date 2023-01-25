@@ -19,7 +19,7 @@ import webbrowser
 from argparse import ArgumentParser, _HelpAction
 from contextlib import ExitStack
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Sequence, Optional
 from urllib.parse import urlencode
 
 import questionary as qn
@@ -34,6 +34,7 @@ from .remote import Remote, SlurmRemote
 from .utils import (
     CommandNotFoundError,
     MilatoolsUserError,
+    SSHConfig,
     SSHConnectionError,
     T,
     get_fully_qualified_name,
@@ -71,9 +72,7 @@ def main():
             "title": f"[v{mversion}] Issue running the command "
             + (f"`mila {command}`" if command else "`mila`"),
         }
-        github_issue_url = (
-            f"https://github.com/mila-iqia/milatools/issues/new?{urlencode(options)}"
-        )
+        github_issue_url = f"https://github.com/mila-iqia/milatools/issues/new?{urlencode(options)}"
         print(
             T.bold_yellow(
                 f"An error occured during the execution of the command "
@@ -114,7 +113,9 @@ def mila():
         help="Open the Mila cluster documentation.",
         formatter_class=SortingHelpFormatter,
     )
-    docs_parser.add_argument("SEARCH", nargs=argparse.REMAINDER, help="Search terms")
+    docs_parser.add_argument(
+        "SEARCH", nargs=argparse.REMAINDER, help="Search terms"
+    )
     docs_parser.set_defaults(function=docs)
 
     # ----- mila intranet ------
@@ -350,7 +351,9 @@ def mila():
     return function(**args_dict)
 
 
-def _convert_uppercase_keys_to_lowercase(args_dict: dict[str, Any]) -> dict[str, Any]:
+def _convert_uppercase_keys_to_lowercase(
+    args_dict: dict[str, Any]
+) -> dict[str, Any]:
     return {(k.lower() if k.isupper() else k): v for k, v in args_dict.items()}
 
 
@@ -462,7 +465,11 @@ def init():
     ###################
 
     print(T.bold_cyan("=" * 60))
-    print(T.bold_cyan("Congrats! You are now ready to start working on the cluster!"))
+    print(
+        T.bold_cyan(
+            "Congrats! You are now ready to start working on the cluster!"
+        )
+    )
     print(T.bold_cyan("=" * 60))
     print(T.bold("To connect to a login node:"))
     print("    ssh mila")
@@ -471,7 +478,9 @@ def init():
     print(T.bold("To open a directory on the cluster with VSCode:"))
     print("    mila code path/to/code/on/cluster")
     print(T.bold("Same as above, but allocate 1 GPU, 4 CPUs, 32G of RAM:"))
-    print("    mila code path/to/code/on/cluster --alloc --gres=gpu:1 --mem=32G -c 4")
+    print(
+        "    mila code path/to/code/on/cluster --alloc --gres=gpu:1 --mem=32G -c 4"
+    )
     print()
     print(
         "For more information, read the milatools documentation at",
@@ -640,12 +649,16 @@ def serve_list(purge: bool):
     for identifier in remote.get_lines("ls .milatools/control", hide=True):
         info = _get_server_info(remote, identifier, hide=True)
         jobid = info.get("jobid", None)
-        status = remote.get_output(f"squeue -j {jobid} -ho %T", hide=True, warn=True)
+        status = remote.get_output(
+            f"squeue -j {jobid} -ho %T", hide=True, warn=True
+        )
         program = info.pop("program", "???")
         if status == "RUNNING":
             necessary_keys = {"node_name", "to_forward"}
             if any(k not in info for k in necessary_keys):
-                qn.print(f"{identifier} ({program}, MISSING INFO)", style="bold red")
+                qn.print(
+                    f"{identifier} ({program}, MISSING INFO)", style="bold red"
+                )
                 to_purge.append((identifier, jobid))
             else:
                 qn.print(f"{identifier} ({program})", style="bold yellow")
@@ -710,7 +723,9 @@ def notebook(path: str | None, **kwargs: Unpack[StandardServerArgs]):
         path: Path to open on the remote machine
     """
     if path and path.endswith(".ipynb"):
-        exit("Only directories can be given to the mila serve notebook command")
+        exit(
+            "Only directories can be given to the mila serve notebook command"
+        )
 
     _standard_server(
         path,
@@ -973,7 +988,9 @@ def _standard_server(
 
         if cf is not None:
             remote.simple_run(f"echo program = {program} >> {cf}")
-            remote.simple_run(f"echo node_name = {results['node_name']} >> {cf}")
+            remote.simple_run(
+                f"echo node_name = {results['node_name']} >> {cf}"
+            )
             remote.simple_run(f"echo host = {host} >> {cf}")
             remote.simple_run(f"echo to_forward = {to_forward} >> {cf}")
             if token_pattern:
@@ -1116,6 +1133,35 @@ def _forward(
     )
     webbrowser.open(url)
     return proc, port
+
+
+def _add_ssh_entry_interactive(
+    ssh_config: SSHConfig,
+    host: str,
+    host_name_for_prompt: Optional[str] = None,
+    Host: Optional[str] = None,
+    **entry,
+) -> bool:
+    """Interactively add an entry to the ssh config file.
+
+    Exits if the user doesn't want to add an entry or doesn't confirm the change.
+
+    Returns whether the changes to `ssh_config` need to be saved later using `ssh_config.save()`.
+    """
+    # NOTE: `Host` is also a parameter to make sure it isn't in `entry`.
+    assert not (host and Host)
+    host = Host or host
+    host_name_for_prompt = host_name_for_prompt or host
+    if host in ssh_config.hosts():
+        return False
+    if not yn(
+        f"There is no '{host_name_for_prompt}' entry in ~/.ssh/config. Create one?"
+    ):
+        exit("Did not change ssh config")
+    ssh_config.add(host, **entry)
+    if not ssh_config.confirm(host_name_for_prompt):
+        exit(f"Did not change ssh config")
+    return True
 
 
 if __name__ == "__main__":

@@ -17,13 +17,17 @@ def test_randname(file_regression):
 @pytest.mark.skip(reason="Fails when test_profile::test__ask_name runs.")
 def test_yn():
     with create_pipe_input() as inp:
-        with patch("questionary.confirm", new=functools.partial(qn.confirm, input=inp)):
+        with patch(
+            "questionary.confirm", new=functools.partial(qn.confirm, input=inp)
+        ):
             inp.send_text("Y")
             result = yn("????")
             assert result == True
 
     with create_pipe_input() as inp:
-        with patch("questionary.confirm", new=functools.partial(qn.confirm, input=inp)):
+        with patch(
+            "questionary.confirm", new=functools.partial(qn.confirm, input=inp)
+        ):
             inp.send_text("n")
             result = yn("????")
             assert result == False

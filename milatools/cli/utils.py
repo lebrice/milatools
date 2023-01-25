@@ -8,12 +8,16 @@ import socket
 import subprocess
 from contextlib import contextmanager
 from pathlib import Path
+from typing import overload
 
 import blessed
 import paramiko
 import questionary as qn
 from invoke.exceptions import UnexpectedExit
 from sshconf import read_ssh_config
+from typing_extensions import Unpack
+
+from .ssh_config_entry import SshConfigEntry, SshConfigEntryLowercase, to_entry
 
 control_file_var = contextvars.ContextVar("control_file", default="/dev/null")
 
@@ -33,7 +37,9 @@ style = qn.Style(
 
 vowels = list("aeiou")
 consonants = list("bdfgjklmnprstvz")
-syllables = ["".join(letters) for letters in itertools.product(consonants, vowels)]
+syllables = [
+    "".join(letters) for letters in itertools.product(consonants, vowels)
+]
 
 
 def randname():
@@ -52,7 +58,9 @@ def with_control_file(remote, name=None):
 
     try:
         remote.simple_run(f"[ -f {pth} ]")
-        exit(f"Server {name} already exists. You may use mila serve kill to remove it.")
+        exit(
+            f"Server {name} already exists. You may use mila serve kill to remove it."
+        )
     except UnexpectedExit:
         pass
 
@@ -139,23 +147,76 @@ def shjoin(split_command):
 class SSHConfig:
     """Wrapper around sshconf with some extra niceties."""
 
-    def __init__(self, path):
+    def __init__(self, path: str | Path):
         self.cfg = read_ssh_config(path)
-        self.add = self.cfg.add
         self.remove = self.cfg.remove
         self.rename = self.cfg.rename
         self.save = self.cfg.save
-        self.host = self.cfg.host
         self.hosts = self.cfg.hosts
 
-    def hoststring(self, host):
+    @overload
+    def add(
+        self,
+        host: str,
+        Host: str | None = None,
+        **kwargs: Unpack[SshConfigEntry],
+    ) -> SshConfigEntry:
+        ...
+
+    @overload
+    def add(self, **kwargs: Unpack[SshConfigEntry]) -> SshConfigEntry:
+        ...
+
+    @overload
+    def add(self, **kwargs: Unpack[SshConfigEntryLowercase]) -> SshConfigEntry:
+        ...
+
+    def add(
+        self, host: str | None = None, Host: str | None = None, **kwargs
+    ) -> SshConfigEntry:
+        """
+        Add an entry for the given host to the SSH configuration.
+
+        Parameters
+        ----------
+        host: The Host entry to add.
+        **kwargs: The parameters for the host (without "Host" parameter itself)
+
+        Returns
+        -------
+        The new ssh_config entry. This is a dictionary, whose keys and value types are annotated in
+        the `SshConfigEntry` TypedDict.
+
+        Raises a ValueError if there are invalid keys in kwargs.
+        """
+        assert not (host and Host)
+        host = Host or host
+        # NOTE: transforms the keys to match their CamelCase entries in the man page. Also raises a
+        # ValueError if the key is not a valid entry.
+        entry = to_entry(**kwargs)
+        self.cfg.add(host, **entry)
+        return entry
+
+    def host(self, host: str) -> SshConfigEntryLowercase:
+        return SshConfigEntryLowercase(**self.cfg.host(host))
+
+    def hoststring(self, host: str):
         lines = []
         for filename, cfg in self.cfg.configs_:
             lines += [line.line for line in cfg.lines_ if line.host == host]
         return "\n".join(lines)
 
+    def confirm(self, host: str):
+        print(
+            T.bold(
+                "The following code will be appended to your ~/.ssh/config:\n"
+            )
+        )
+        print(self.hoststring(host))
+        return yn("\nIs this OK?")
 
-def qualified(node_name):
+
+def qualified(node_name: str) -> str:
     """Return the fully qualified name corresponding to this node name."""
 
     if "." not in node_name and not node_name.endswith(".server.mila.quebec"):
@@ -169,7 +230,9 @@ def get_fully_qualified_name() -> str:
     Much faster than socket.getfqdn() on Mac. Falls back to that if the hostname command is not available.
     """
     try:
-        return subprocess.check_output(["hostname", "-f"]).decode("utf-8").strip()
+        return (
+            subprocess.check_output(["hostname", "-f"]).decode("utf-8").strip()
+        )
     except Exception:
         # Fall back, e.g. on Windows.
         return socket.getfqdn()
