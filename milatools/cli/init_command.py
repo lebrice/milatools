@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import difflib
 from pathlib import Path
-
+from typing_extensions import Unpack
 import questionary as qn
 
 from .utils import SSHConfig, T, yn
+from .ssh_config_entry import SshConfigEntry
 
 
 def setup_ssh_config(
@@ -33,7 +34,7 @@ def setup_ssh_config(
 
     _add_ssh_entry(
         ssh_config,
-        "mila",
+        Host="mila",
         HostName="login.server.mila.quebec",
         User=username,
         PreferredAuthentications="publickey,keyboard-interactive",
@@ -44,7 +45,7 @@ def setup_ssh_config(
 
     _add_ssh_entry(
         ssh_config,
-        "mila-cpu",
+        Host="mila-cpu",
         User=username,
         Port=2222,
         ForwardAgent="yes",
@@ -78,7 +79,7 @@ def setup_ssh_config(
     else:
         _add_ssh_entry(
             ssh_config,
-            cnode_pattern,
+            Host=cnode_pattern,
             HostName="%h",
             User=username,
             ProxyJump="mila",
@@ -126,7 +127,11 @@ def _setup_ssh_config_file(config_file_path: str | Path) -> Path:
 
 
 def _confirm_changes(ssh_config: SSHConfig, previous: str) -> bool:
-    print(T.bold("The following modifications will be made to your ~/.ssh/config:\n"))
+    print(
+        T.bold(
+            "The following modifications will be made to your ~/.ssh/config:\n"
+        )
+    )
     diff_lines = list(
         difflib.unified_diff(
             (previous + "\n").splitlines(True),
@@ -156,13 +161,14 @@ def _get_username(ssh_config: SSHConfig) -> str:
     # Note: If there are none, or more than one, then we'll ask the user for their username, just
     # to be sure.
     if len(hosts_with_mila_in_name_and_a_user_entry) == 1:
-        username = ssh_config.host(hosts_with_mila_in_name_and_a_user_entry[0]).get(
-            "user"
-        )
+        username = ssh_config.host(
+            hosts_with_mila_in_name_and_a_user_entry[0]
+        ).get("user")
 
     while not username:
         username = qn.text(
-            "What's your username on the mila cluster?\n", validate=_is_valid_username
+            "What's your username on the mila cluster?\n",
+            validate=_is_valid_username,
         ).unsafe_ask()
     return username.strip()
 
@@ -182,9 +188,7 @@ def _is_valid_username(text: str) -> bool | str:
 
 def _add_ssh_entry(
     ssh_config: SSHConfig,
-    host: str,
-    Host: str | None = None,
-    **entry,
+    **entry: Unpack[SshConfigEntry],
 ) -> bool:
     """Interactively add an entry to the ssh config file.
 
@@ -193,10 +197,11 @@ def _add_ssh_entry(
     Returns whether the changes to `ssh_config` need to be saved later using `ssh_config.save()`.
     """
     # NOTE: `Host` is also a parameter to make sure it isn't in `entry`.
-    assert not (host and Host)
-    host = Host or host
+    entry_without_host = entry.copy()
+    host = entry_without_host.pop("Host")  # type: ignore
     if host in ssh_config.hosts():
         # Don't change an existing entry for now.
         return False
-    ssh_config.add(host, **entry)
+
+    ssh_config.add(host, **entry_without_host)
     return True

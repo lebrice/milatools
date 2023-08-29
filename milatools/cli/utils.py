@@ -17,7 +17,10 @@ from invoke.exceptions import UnexpectedExit
 from sshconf import read_ssh_config
 from typing_extensions import Unpack
 
-from .ssh_config_entry import SshConfigEntry, SshConfigEntryLowercase, to_entry
+from .ssh_config_entry import (
+    SshConfigEntry,
+    to_entry,
+)
 
 control_file_var = contextvars.ContextVar("control_file", default="/dev/null")
 
@@ -154,25 +157,11 @@ class SSHConfig:
         self.save = self.cfg.save
         self.hosts = self.cfg.hosts
 
-    @overload
     def add(
         self,
-        host: str,
+        host: str | None = None,
         Host: str | None = None,
         **kwargs: Unpack[SshConfigEntry],
-    ) -> SshConfigEntry:
-        ...
-
-    @overload
-    def add(self, **kwargs: Unpack[SshConfigEntry]) -> SshConfigEntry:
-        ...
-
-    @overload
-    def add(self, **kwargs: Unpack[SshConfigEntryLowercase]) -> SshConfigEntry:
-        ...
-
-    def add(
-        self, host: str | None = None, Host: str | None = None, **kwargs
     ) -> SshConfigEntry:
         """
         Add an entry for the given host to the SSH configuration.
@@ -189,16 +178,21 @@ class SSHConfig:
 
         Raises a ValueError if there are invalid keys in kwargs.
         """
-        assert not (host and Host)
+        assert bool(host) ^ bool(
+            Host
+        ), "Need to pass (only) one of `host` or `Host`."
         host = Host or host
+        assert host is not None
         # NOTE: transforms the keys to match their CamelCase entries in the man page. Also raises a
         # ValueError if the key is not a valid entry.
-        entry = to_entry(kwargs)
-        self.cfg.add(host, **entry)
+        self.cfg.add(host, **kwargs)
+        entry = kwargs.copy()
+        entry["Host"] = host
         return entry
 
-    def host(self, host: str) -> SshConfigEntryLowercase:
-        return SshConfigEntryLowercase(**self.cfg.host(host))
+    def host(self, host: str) -> SshConfigEntry:
+        # return to_entry(self.cfg.host(host))
+        return SshConfigEntry(**self.cfg.host(host))
 
     def hoststring(self, host: str):
         lines = []

@@ -7,7 +7,7 @@ import pytest
 
 from milatools.cli.ssh_config_entry import (
     SshConfigEntry,
-    ssh_config_entry_keys_lowercase,
+    _ssh_config_entry_keys_lower,
     to_entry,
 )
 
@@ -33,7 +33,7 @@ def man_ssh_config():
     def is_argument_description_start_line(line: str) -> bool:
         line = line.strip()
         starts_with_key = line.lower().startswith(
-            tuple(ssh_config_entry_keys_lowercase)
+            tuple(_ssh_config_entry_keys_lower)
         )
         if not starts_with_key:
             return False
@@ -83,7 +83,7 @@ keys_not_in_man_page = ["UsePrivilegedPort"]
         )
         if k == wrong_k.lower()
         else k
-        for k in ssh_config_entry_keys_lowercase
+        for k in _ssh_config_entry_keys_lower
         for wrong_k in keys_not_in_man_page
     ],
 )
@@ -110,16 +110,22 @@ def test_to_entry_valid(dict: dict, expected: SshConfigEntry):
 @pytest.mark.parametrize(
     "dict, error_type, error_message",
     [
-        ({"Hosteoo": "bob.com"}, ValueError, "Invalid key: 'Hosteoo'"),
+        (
+            {"Hosteoo": "bob.com"},
+            ValueError,
+            "Invalid key in SSH config: 'Hosteoo'",
+        ),
         (
             {"Hosteoo": "bob.com", "foo": 123},
             ValueError,
-            "Invalid keys: ['Hosteoo', 'foo']",
+            "Invalid keys in SSH config entry: ['Hosteoo', 'foo']",
         ),
         ({"host": "bob.com", "Host": "bobb.com"}, ValueError, "Key collision"),
     ],
 )
-def test_to_entry_invalid(dict: dict, error_type: type[Exception], error_message: str):
+def test_to_entry_invalid(
+    dict: dict, error_type: type[Exception], error_message: str
+):
     match = re.escape(error_message)
     assert isinstance(match, str)
     with pytest.raises(error_type, match=match):
