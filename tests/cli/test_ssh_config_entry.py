@@ -21,7 +21,9 @@ def man_ssh_config():
 
     manpage_lines = str(manpage).splitlines()
     _first_line_indices = [
-        index for index, line in enumerate(manpage_lines) if line.strip().startswith("Host")
+        index
+        for index, line in enumerate(manpage_lines)
+        if line.strip().startswith("Host")
     ]
     assert _first_line_indices
     first_line_index = _first_line_indices[0]
@@ -30,7 +32,9 @@ def man_ssh_config():
 
     def is_argument_description_start_line(line: str) -> bool:
         line = line.strip()
-        starts_with_key = line.lower().startswith(tuple(ssh_config_entry_keys_lowercase))
+        starts_with_key = line.lower().startswith(
+            tuple(ssh_config_entry_keys_lowercase)
+        )
         if not starts_with_key:
             return False
         if not line:
@@ -73,7 +77,9 @@ keys_not_in_man_page = ["UsePrivilegedPort"]
     [
         pytest.param(
             k,
-            marks=pytest.mark.xfail(reason=f"{wrong_k} doesn't show up in man page on my machine"),
+            marks=pytest.mark.xfail(
+                reason=f"{wrong_k} doesn't show up in man page on my machine"
+            ),
         )
         if k == wrong_k.lower()
         else k
@@ -105,12 +111,15 @@ def test_to_entry_valid(dict: dict, expected: SshConfigEntry):
     "dict, error_type, error_message",
     [
         ({"Hosteoo": "bob.com"}, ValueError, "Invalid key: 'Hosteoo'"),
-        ({"Hosteoo": "bob.com", "foo": 123}, ValueError, "Invalid keys: ['Hosteoo', 'foo']"),
+        (
+            {"Hosteoo": "bob.com", "foo": 123},
+            ValueError,
+            "Invalid keys: ['Hosteoo', 'foo']",
+        ),
         ({"host": "bob.com", "Host": "bobb.com"}, ValueError, "Key collision"),
     ],
 )
 def test_to_entry_invalid(dict: dict, error_type: type[Exception], error_message: str):
-
     match = re.escape(error_message)
     assert isinstance(match, str)
     with pytest.raises(error_type, match=match):

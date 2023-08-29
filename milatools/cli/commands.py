@@ -1159,8 +1159,13 @@ def _add_ssh_entry_interactive(
     ):
         exit("Did not change ssh config")
     ssh_config.add(host, **entry)
-    if not ssh_config.confirm(host_name_for_prompt):
-        exit(f"Did not change ssh config")
+
+    print(
+        T.bold("The following code will be appended to your ~/.ssh/config:\n")
+    )
+    print(ssh_config.hoststring(host))
+    if not yn("\nIs this OK?"):
+        exit("Did not change ssh config")
     return True
 
 

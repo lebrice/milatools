@@ -193,7 +193,7 @@ class SSHConfig:
         host = Host or host
         # NOTE: transforms the keys to match their CamelCase entries in the man page. Also raises a
         # ValueError if the key is not a valid entry.
-        entry = to_entry(**kwargs)
+        entry = to_entry(kwargs)
         self.cfg.add(host, **entry)
         return entry
 

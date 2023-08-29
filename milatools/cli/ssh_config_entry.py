@@ -93,7 +93,15 @@ class SshConfigEntryLowercase(TypedDict, total=False):
     localcommand: str
     localforward: str
     loglevel: Literal[
-        "QUIET", "FATAL", "ERROR", "INFO", "VERBOSE", "DEBUG", "DEBUG1", "DEBUG2", "DEBUG3"
+        "QUIET",
+        "FATAL",
+        "ERROR",
+        "INFO",
+        "VERBOSE",
+        "DEBUG",
+        "DEBUG1",
+        "DEBUG2",
+        "DEBUG3",
     ]
     macs: str
     nohostauthenticationforlocalhost: YesOrNo
@@ -711,7 +719,15 @@ class SshConfigEntry(TypedDict, total=False):
     """
 
     LogLevel: Literal[
-        "QUIET", "FATAL", "ERROR", "INFO", "VERBOSE", "DEBUG", "DEBUG1", "DEBUG2", "DEBUG3"
+        "QUIET",
+        "FATAL",
+        "ERROR",
+        "INFO",
+        "VERBOSE",
+        "DEBUG",
+        "DEBUG1",
+        "DEBUG2",
+        "DEBUG3",
     ]
     """Gives the verbosity level that is used when logging messages from ssh(1).
 
@@ -1111,7 +1127,11 @@ def has_valid_keys(entry: dict) -> bool:
 
 
 def get_invalid_keys(entry: dict) -> list[str]:
-    return [key for key in entry.keys() if key.lower() not in ssh_config_entry_keys_lowercase]
+    return [
+        key
+        for key in entry.keys()
+        if key.lower() not in ssh_config_entry_keys_lowercase
+    ]
 
 
 def to_entry(entry: dict) -> SshConfigEntry:
@@ -1127,7 +1147,9 @@ def to_entry(entry: dict) -> SshConfigEntry:
     if len(lowercased_keys) != len(entry):
         # TODO: Maybe allow collisions if the values match?
         # TODO: Find the offending keys and their values.
-        raise ValueError("Key collision: Can't have multiple keys with the same lowercase value.")
+        raise ValueError(
+            "Key collision: Can't have multiple keys with the same lowercase value."
+        )
 
     config_entry = SshConfigEntryLowercase(**{k.lower(): v for k, v in entry.items()})  # type: ignore
     return make_CamelCase(config_entry)
@@ -1762,10 +1784,26 @@ class _SshConfigEntry(SshConfigEntryLowercase, SshConfigEntry, total=False):
     """
 
     loglevel: Literal[
-        "QUIET", "FATAL", "ERROR", "INFO", "VERBOSE", "DEBUG", "DEBUG1", "DEBUG2", "DEBUG3"
+        "QUIET",
+        "FATAL",
+        "ERROR",
+        "INFO",
+        "VERBOSE",
+        "DEBUG",
+        "DEBUG1",
+        "DEBUG2",
+        "DEBUG3",
     ]
     LogLevel: Literal[
-        "QUIET", "FATAL", "ERROR", "INFO", "VERBOSE", "DEBUG", "DEBUG1", "DEBUG2", "DEBUG3"
+        "QUIET",
+        "FATAL",
+        "ERROR",
+        "INFO",
+        "VERBOSE",
+        "DEBUG",
+        "DEBUG1",
+        "DEBUG2",
+        "DEBUG3",
     ]
     """Gives the verbosity level that is used when logging messages from ssh(1).
 
