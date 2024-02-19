@@ -7,8 +7,10 @@ import time
 from logging import getLogger as get_logger
 
 import pytest
+from fabric.connection import Connection
 
 from milatools.cli.remote import Remote
+from milatools.cli.utils import cluster_to_connect_kwargs
 from tests.cli.common import in_github_CI
 
 logger = get_logger(__name__)
@@ -110,3 +112,45 @@ def allocation_flags(cluster: str, request: pytest.FixtureRequest) -> list[str]:
         f"--{key}={value}" if value is not None else f"--{key}"
         for key, value in allocation_options.items()
     ]
+
+
+@pytest.fixture(scope="session", params=[SLURM_CLUSTER])
+def cluster(
+    request: pytest.FixtureRequest,
+) -> str:
+    """Fixture that gives the hostname of the slurm cluster to use for tests.
+
+    NOTE: The `cluster` can also be parametrized indirectly by tests, for example:
+
+    ```python
+    @pytest.mark.parametrize("cluster", ["mila", "some_cluster"], indirect=True)
+    def test_something(remote: Remote):
+        ...  # here the remote is connected to the cluster specified above!
+    ```
+    """
+    slurm_cluster_hostname = request.param
+
+    if not slurm_cluster_hostname:
+        pytest.skip("Requires ssh access to a SLURM cluster.")
+    return slurm_cluster_hostname
+
+
+@pytest.fixture(scope="function")
+def login_node(cluster: str) -> Remote:
+    """Fixture that gives a Remote connected to the login node of a slurm cluster.
+
+    NOTE: Making this a function-scoped fixture because the Connection object of the
+    Remote seems to be passed (and reused?) when creating the `SlurmRemote` object.
+
+    We want to avoid that, because `SlurmRemote` creates jobs when it runs commands.
+    We also don't want to accidentally end up with `login_node` that runs commands on
+    compute nodes because a previous test kept the same connection object while doing
+    salloc (just in case that were to happen).
+    """
+
+    return Remote(
+        cluster,
+        connection=Connection(
+            cluster, connect_kwargs=cluster_to_connect_kwargs.get(cluster)
+        ),
+    )

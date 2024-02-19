@@ -69,7 +69,7 @@ if typing.TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def main():
+def main(argv: list[str] | None = None):
     if sys.platform != "win32" and get_fully_qualified_name().endswith(
         ".server.mila.quebec"
     ):
@@ -79,7 +79,7 @@ def main():
         )
 
     try:
-        mila()
+        mila(argv)
     except MilatoolsUserError as exc:
         # These are user errors and should not be reported
         print("ERROR:", exc, file=sys.stderr)
@@ -120,7 +120,7 @@ def main():
         exit(1)
 
 
-def mila():
+def mila(argv: list[str] | None = None):
     parser = ArgumentParser(prog="mila", description=__doc__, add_help=True)
     parser.add_argument(
         "--version",
@@ -372,7 +372,7 @@ def mila():
     _add_standard_server_args(serve_aim_parser)
     serve_aim_parser.set_defaults(function=aim)
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     args_dict = vars(args)
     verbose: int = args_dict.pop("verbose")
     function = args_dict.pop("function")

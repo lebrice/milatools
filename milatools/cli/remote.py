@@ -5,6 +5,7 @@ import socket
 import tempfile
 import time
 from collections.abc import Callable, Iterable, Sequence
+from logging import getLogger as get_logger
 from pathlib import Path
 from queue import Empty, Queue
 from typing import Literal, TextIO, overload
@@ -26,6 +27,8 @@ from .utils import (
     here,
     shjoin,
 )
+
+logger = get_logger(__name__)
 
 batch_template = """#!/bin/bash
 #SBATCH --output={output_file}
@@ -274,6 +277,8 @@ class Remote:
         -------
         an `invoke.Result` if ``asynchronous=False``, else an `invoke.Promise`.
         """
+        logger.debug(f"Running command {cmd} in {self.hostname}")
+
         # NOTE: See invoke.runners.Runner.run for possible values in **kwargs
         if display is None:
             display = not hide
