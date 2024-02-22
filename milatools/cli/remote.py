@@ -127,7 +127,10 @@ class Remote:
                 if connect_kwargs is not None:
                     _connect_kwargs = (_connect_kwargs or {}).copy()
                     _connect_kwargs.update(connect_kwargs)
-
+                logger.debug(
+                    f"Creating a new Connection to {hostname} with "
+                    f"connect_kwargs={_connect_kwargs}"
+                )
                 connection = Connection(hostname, connect_kwargs=_connect_kwargs)
                 if keepalive:
                     connection.open()
