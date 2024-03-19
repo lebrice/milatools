@@ -14,6 +14,7 @@ from tests.integration.conftest import SLURM_CLUSTER
 passwordless_ssh_connection_to_localhost_is_setup = False
 
 try:
+    # TODO: Figure out how to make this also work in the dev container.
     Connection("localhost").open()
 except (
     paramiko.ssh_exception.SSHException,
