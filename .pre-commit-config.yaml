@@ -78,5 +78,6 @@ repos:
       - id: codespell
         args:
           - --skip=logs/**,data/**
+          - --exclude-file=.codespellignorelines
           # - --ignore-words-list=abc,def
         require_serial: true
