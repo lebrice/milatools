@@ -103,6 +103,7 @@ class RemoteV2(Runner):
         display: bool = True,
         warn: bool = False,
         hide: Hide = False,
+        _stack_level: int = 2,
     ):
         assert self._started
         run_command = ssh_command(
@@ -114,12 +115,25 @@ class RemoteV2(Runner):
         if display:
             # NOTE: Only display the input if it is passed.
             if not input:
-                console.log(f"({self.hostname}) $ {command}", style="green")
+                console.log(
+                    f"({self.hostname}) $ {command}",
+                    style="green",
+                    _stack_offset=_stack_level,
+                )
             else:
-                console.log(f"({self.hostname}) $ {command=}\n{input}", style="green")
+                console.log(
+                    f"({self.hostname}) $ {command=}\n{input}",
+                    style="green",
+                    _stack_offset=_stack_level,
+                )
         # Run the ssh command with the subprocess.run function.
         return self.local_runner.run(
-            command=run_command, input=input, display=False, warn=warn, hide=hide
+            command=run_command,
+            input=input,
+            display=False,
+            warn=warn,
+            hide=hide,
+            _stack_level=_stack_level + 1,
         )
 
     async def run_async(
@@ -130,6 +144,7 @@ class RemoteV2(Runner):
         display: bool = True,
         warn: bool = False,
         hide: Hide = False,
+        _stack_level: int = 2,
     ) -> subprocess.CompletedProcess[str]:
         assert self._started
         run_command = ssh_command(
@@ -140,11 +155,24 @@ class RemoteV2(Runner):
         )
         if display:
             if not input:
-                console.log(f"({self.hostname}) $ {command}", style="green")
+                console.log(
+                    f"({self.hostname}) $ {command}",
+                    style="green",
+                    _stack_offset=_stack_level,
+                )
             else:
-                console.log(f"({self.hostname}) $ {command=}\n{input}", style="green")
+                console.log(
+                    f"({self.hostname}) $ {command=}\n{input}",
+                    style="green",
+                    _stack_offset=_stack_level,
+                )
         return await self.local_runner.run_async(
-            command=run_command, input=input, display=False, warn=warn, hide=hide
+            command=run_command,
+            input=input,
+            display=False,
+            warn=warn,
+            hide=hide,
+            _stack_level=_stack_level + 1,
         )
 
     def _start(self) -> None:

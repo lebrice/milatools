@@ -82,15 +82,23 @@ class ComputeNode(Runner):
         )
 
     def run(
-        self, command: str, display: bool = True, warn: bool = False, hide: Hide = False
+        self,
+        command: str,
+        display: bool = True,
+        warn: bool = False,
+        hide: Hide = False,
+        _stack_level: int = 2,
     ):
-        srun_command, input = self._get_srun_command_and_input(command, display=display)
+        srun_command, input = self._get_srun_command_and_input(
+            command, display=display, _stack_level=_stack_level + 1
+        )
         return self.login_node.run(
             command=srun_command,
             input=input,
             display=False,
             warn=warn,
             hide=hide,
+            _stack_level=_stack_level + 1,
         )
 
     async def run_async(
@@ -99,23 +107,33 @@ class ComputeNode(Runner):
         display: bool = True,
         warn: bool = False,
         hide: Hide = False,
+        _stack_level: int = 2,
     ) -> subprocess.CompletedProcess[str]:
-        srun_command, input = self._get_srun_command_and_input(command, display=display)
+        srun_command, input = self._get_srun_command_and_input(
+            command, display=display, _stack_level=_stack_level + 1
+        )
         return await self.login_node.run_async(
             command=srun_command,
             input=input,
             display=False,
             warn=warn,
             hide=hide,
+            _stack_level=_stack_level + 1,
         )
 
-    def _get_srun_command_and_input(self, command: str, display: bool):
+    def _get_srun_command_and_input(
+        self, command: str, display: bool, _stack_level: int = 2
+    ):
         """Common portion of `run` and `run_async`."""
         if self._closed:
             raise JobNotRunningError(self.job_id)
         if display:
             # Show the compute node hostname instead of the login node.
-            console.log(f"({self.hostname}) $ {command}", style="green")
+            console.log(
+                f"({self.hostname}) $ {command}",
+                style="green",
+                _stack_offset=_stack_level,
+            )
 
         if shlex.quote(command) == command:
             # The command is simple and doesn't need to be shell-escaped, so we can run
