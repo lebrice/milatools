@@ -45,7 +45,8 @@ def test_hostname():
 @pytest.mark.parametrize(
     ("cluster_name", "node", "expected"),
     [
-        ("mila", "cn-a001", "cn-a001.server.mila.quebec"),
+        ("mila", "cn-a001", "cn-a001"),
+        ("mila", "cn-a001.server.mila.quebec", "cn-a001.server.mila.quebec"),
     ]
     + [
         # Host !beluga  bc????? bg????? bl?????
