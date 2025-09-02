@@ -5,6 +5,7 @@ import errno
 import getpass
 import json
 import os
+import random
 import shutil
 import subprocess
 import sys
@@ -326,6 +327,192 @@ def test_fixes_overly_general_entry(
         "Host *.server.mila.quebec !*login.server.mila.quebec"
         in resulting_contents.splitlines()
     )
+
+
+def test_updates_drac_login_node_entry(
+    tmp_path: Path,
+    input_pipe: PipeInput,
+    file_regression: FileRegressionFixture,
+):
+    """Test the case where the user already has a DRAC entry and we have new DRAC
+    clusters."""
+    ssh_config_path = tmp_path / ".ssh" / "config"
+    ssh_config_path.parent.mkdir(parents=True, exist_ok=False)
+    initial_contents = textwrap.dedent(
+        """\
+        Host beluga cedar graham narval niagara
+          Hostname %h.alliancecan.ca
+          User bob
+        """
+    )
+    with open(ssh_config_path, "w") as f:
+        f.write(initial_contents)
+
+    # Enter username, accept fixing that entry, then confirm.
+    for user_input in [
+        "y",  # mila account?
+        "bob\r",  # mila username
+        "y",  # DRAC account?
+        "y",  # confirm?
+    ]:
+        input_pipe.send_text(user_input)
+
+    setup_ssh_config(ssh_config_path=ssh_config_path)
+
+    with open(ssh_config_path) as f:
+        resulting_contents = f.read()
+
+    file_regression.check(resulting_contents)
+
+
+# @pytest.fixture(scope="module")
+# def ssh_config_file
+def test_compute_node_entries(tmp_path: Path, input_pipe: PipeInput):
+    """Check that SSH config entries for compute nodes have the right options.
+
+    The most important one being the ProxyJump option to the cluster login node, as well
+    as the username.
+    """
+
+    # Get an SSH config file as created by `mila init` with both Mila and DRAC accounts.
+    ssh_config_path = tmp_path / ".ssh" / "config"
+    ssh_config_path.parent.mkdir(parents=True, exist_ok=False)
+    mila_username = "bob_mila"
+    drac_username = "bob_drac"
+    # Enter username, accept fixing that entry, then confirm.
+    for user_input in [
+        "y",  # mila account?
+        f"{mila_username}\r",  # mila username
+        "y",  # DRAC account?
+        f"{drac_username}\r"  # drac username
+        "y",  # confirm?
+    ]:
+        input_pipe.send_text(user_input)
+
+    setup_ssh_config(ssh_config_path=ssh_config_path)
+
+    from paramiko.config import SSHConfig as SshConfigReader
+
+    reader = SshConfigReader.from_path(ssh_config_path)
+
+    # Check that compute nodes have a ProxyJump option applied to the right cluster.
+    random.seed(123)
+
+    # mila
+    for letter in ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"]:
+        number = random.randint(1, 999)
+        compute_node_entry = reader.lookup(f"cn-{letter}{number:03d}")
+        assert compute_node_entry.get("proxyjump") == "mila"
+        assert compute_node_entry.get("user") == mila_username
+
+    # beluga
+    prefixes = ["bc", "bg", "bl"]
+    n_digits = 5
+    for prefix in prefixes:
+        number = random.randint(0, 10**n_digits - 1)
+        compute_node_entry = reader.lookup(f"{prefix}{number:0{n_digits}d}")
+        assert compute_node_entry.get("proxyjump") == "narval"
+        assert compute_node_entry.get("user") == drac_username
+
+    # cedar
+    prefix = "cdr"
+    n_digitss = [1, 2, 3, 4]
+    for n_digits in n_digitss:
+        number = random.randint(0, 10**n_digits - 1)
+        compute_node_entry = reader.lookup(f"{prefix}{number:0{n_digits}d}")
+        assert compute_node_entry.get("proxyjump") == "cedar"
+        assert compute_node_entry.get("user") == drac_username
+
+    # graham
+    prefix = "gra"
+    n_digitss = [3, 4]
+    # Important here, 'graham' shouldn't be a match for 'gra???' or 'gra????'.
+    assert reader.lookup("graham").get("proxyjump") is None
+    for n_digits in n_digitss:
+        number = random.randint(0, 10**n_digits - 1)
+        compute_node_entry = reader.lookup(f"{prefix}{number:0{n_digits}d}")
+        assert compute_node_entry.get("proxyjump") == "graham"
+        assert compute_node_entry.get("user") == drac_username
+
+    # narval
+    prefixes = ["nc", "ng"]
+    n_digits = 5
+    for prefix in prefixes:
+        number = random.randint(0, 10**n_digits - 1)
+        compute_node_entry = reader.lookup(f"{prefix}{number:0{n_digits}d}")
+        assert compute_node_entry.get("proxyjump") == "narval"
+        assert compute_node_entry.get("user") == drac_username
+
+    # niagara
+    prefix = "nia"
+    n_digits = 4
+    # Important here, 'niagara' shouldn't be a match.
+    assert reader.lookup("niagara").get("proxyjump") is None
+    number = random.randint(0, 10**n_digits - 1)
+    compute_node_entry = reader.lookup(f"{prefix}{number:0{n_digits}d}")
+    assert compute_node_entry.get("proxyjump") == "niagara"
+    assert compute_node_entry.get("user") == drac_username
+
+    # rorqual
+    prefixes = ["rc", "rg", "rl"]
+    n_digits = 5
+    for prefix in prefixes:
+        number = random.randint(0, 10**n_digits - 1)
+        compute_node_entry = reader.lookup(f"{prefix}{number:0{n_digits}d}")
+        assert compute_node_entry.get("proxyjump") == "rorqual"
+        assert compute_node_entry.get("user") == drac_username
+
+    # fir
+    prefixes = ["fc", "fb"]
+    n_digits = 5
+    for prefix in prefixes:
+        number = random.randint(0, 10**n_digits - 1)
+        compute_node_entry = reader.lookup(f"{prefix}{number:0{n_digits}d}")
+        assert compute_node_entry.get("proxyjump") == "fir"
+        assert compute_node_entry.get("user") == drac_username
+
+    # nibi
+    # c? c?? c??? g? g?? l? l?? m? m?? u?
+    prefix_to_ndigits = {
+        "c": [1, 2, 3],
+        "g": [1, 2],
+        "l": [1, 2],
+        "m": [1, 2],
+        "u": [1],
+    }
+    for prefix, n_digitss in prefix_to_ndigits.items():
+        for n_digits in n_digitss:
+            number = random.randint(0, 10**n_digits - 1)
+            compute_node_entry = reader.lookup(f"{prefix}{number:0{n_digits}d}")
+            assert compute_node_entry.get("proxyjump") == "nibi"
+            assert compute_node_entry.get("user") == drac_username
+
+    # tamia
+    prefixes = ["tc", "tg"]
+    n_digits = 5
+    for prefix in prefixes:
+        number = random.randint(0, 10**n_digits - 1)
+        compute_node_entry = reader.lookup(f"{prefix}{number:0{n_digits}d}")
+        assert compute_node_entry.get("proxyjump") == "tamia"
+        assert compute_node_entry.get("user") == drac_username
+
+    # killarney
+    # kn???
+    prefix = "kn"
+    n_digits = 3
+    number = random.randint(0, 10**n_digits - 1)
+    compute_node_entry = reader.lookup(f"{prefix}{number:0{n_digits}d}")
+    assert compute_node_entry.get("proxyjump") == "killarney"
+    assert compute_node_entry.get("user") == drac_username
+
+    # vulcan
+    # rack??-??
+    prefix = "rack"
+    number_1 = random.randint(0, 99)
+    number_2 = random.randint(0, 99)
+    compute_node_entry = reader.lookup(f"rack{number_1:02d}-{number_2:02d}")
+    assert compute_node_entry.get("proxyjump") == "vulcan"
+    assert compute_node_entry.get("user") == drac_username
 
 
 def test_ssh_config_host(tmp_path: Path):
