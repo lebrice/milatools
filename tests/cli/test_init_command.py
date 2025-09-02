@@ -26,6 +26,7 @@ from pytest_regressions.file_regression import FileRegressionFixture
 from milatools.cli import init_command
 from milatools.cli.init_command import (
     DRAC_CLUSTERS,
+    _confirm_changes,
     _get_drac_username,
     _get_mila_username,
     _setup_ssh_config_file,
@@ -39,7 +40,7 @@ from milatools.cli.init_command import (
     setup_vscode_settings,
     setup_windows_ssh_config_from_wsl,
 )
-from milatools.cli.utils import SSHConfig, running_inside_WSL
+from milatools.cli.utils import SSHConfig, running_inside_WSL, yn
 from milatools.utils.local_v1 import LocalV1, check_passwordless
 from milatools.utils.remote_v1 import RemoteV1
 from milatools.utils.remote_v2 import (
@@ -350,12 +351,13 @@ def test_updates_drac_login_node_entry(
 
     # Enter username, accept fixing that entry, then confirm.
     for user_input in [
-        "y",  # mila account?
-        "bob\r",  # mila username
+        "n",  # mila account?
+        # TODO: Should we ask if the user has a DRAC account if there is already a partial DRAC config?
         "y",  # DRAC account?
+        "bob\r",
         "y",  # confirm?
     ]:
-        input_pipe.send_text(user_input)
+        input_pipe.send_text(user_input + "\n")
 
     setup_ssh_config(ssh_config_path=ssh_config_path)
 
@@ -367,7 +369,7 @@ def test_updates_drac_login_node_entry(
 
 # @pytest.fixture(scope="module")
 # def ssh_config_file
-def test_compute_node_entries(tmp_path: Path, input_pipe: PipeInput):
+def test_compute_node_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Check that SSH config entries for compute nodes have the right options.
 
     The most important one being the ProxyJump option to the cluster login node, as well
@@ -379,15 +381,18 @@ def test_compute_node_entries(tmp_path: Path, input_pipe: PipeInput):
     ssh_config_path.parent.mkdir(parents=True, exist_ok=False)
     mila_username = "bob_mila"
     drac_username = "bob_drac"
+
     # Enter username, accept fixing that entry, then confirm.
-    for user_input in [
-        "y",  # mila account?
-        f"{mila_username}\r",  # mila username
-        "y",  # DRAC account?
-        f"{drac_username}\r"  # drac username
-        "y",  # confirm?
-    ]:
-        input_pipe.send_text(user_input)
+    monkeypatch.setattr(init_command, yn.__name__, Mock(return_value=True))
+    monkeypatch.setattr(
+        init_command, _get_mila_username.__name__, Mock(return_value=mila_username)
+    )
+    monkeypatch.setattr(
+        init_command, _get_drac_username.__name__, Mock(return_value=drac_username)
+    )
+    monkeypatch.setattr(
+        init_command, _confirm_changes.__name__, Mock(return_value=True)
+    )
 
     setup_ssh_config(ssh_config_path=ssh_config_path)
 
