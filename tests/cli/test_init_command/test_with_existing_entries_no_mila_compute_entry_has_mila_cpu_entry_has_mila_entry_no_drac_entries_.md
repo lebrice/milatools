@@ -21,9 +21,6 @@ Host mila
   Port 2222
   ServerAliveInterval 120
   ServerAliveCountMax 5
-  ControlMaster auto
-  ControlPath ~/.cache/ssh/%r@%h:%p
-  ControlPersist yes
 
 Host mila-cpu
   HostName login.server.mila.quebec
@@ -42,9 +39,6 @@ Host mila-cpu
 Host *.server.mila.quebec !*login.server.mila.quebec
   HostName %h
   ProxyJump mila
-  ControlMaster auto
-  ControlPath ~/.cache/ssh/%r@%h:%p
-  ControlPersist yes
   User bob
 
 Host beluga cedar graham narval niagara

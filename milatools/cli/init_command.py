@@ -53,7 +53,7 @@ MILA_ENTRIES: dict[str, dict[str, int | str]] = {
         "Port": 2222,
         "ServerAliveInterval": 120,
         "ServerAliveCountMax": 5,
-        **ssh_multiplexing_config,
+        # **ssh_multiplexing_config,
     },
     "mila-cpu": {
         # "User": mila_username,
@@ -79,11 +79,9 @@ MILA_ENTRIES: dict[str, dict[str, int | str]] = {
         "HostName": "%h",
         # "User": mila_username,
         "ProxyJump": "mila",
-        **ssh_multiplexing_config,
     },
     "cn-????": {
         "ProxyJump": "mila",
-        **ssh_multiplexing_config,
     },
 }
 DRAC_CLUSTERS = [

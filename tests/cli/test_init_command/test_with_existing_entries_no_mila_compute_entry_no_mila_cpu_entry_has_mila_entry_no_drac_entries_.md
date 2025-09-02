@@ -18,9 +18,6 @@ Host mila
   Port 2222
   ServerAliveInterval 120
   ServerAliveCountMax 5
-  ControlMaster auto
-  ControlPath ~/.cache/ssh/%r@%h:%p
-  ControlPersist yes
 
 Host mila-cpu
   Port 2222
