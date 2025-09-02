@@ -24,3 +24,7 @@ Host *.server.mila.quebec !*login.server.mila.quebec
   HostName %h
   ProxyJump mila
   User bob
+
+Host cn-????
+  ProxyJump mila
+  User bob

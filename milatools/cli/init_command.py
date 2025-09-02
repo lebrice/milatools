@@ -77,11 +77,12 @@ MILA_ENTRIES: dict[str, dict[str, int | str]] = {
     },
     "*.server.mila.quebec !*login.server.mila.quebec": {
         "HostName": "%h",
-        # "User": mila_username,
         "ProxyJump": "mila",
+        # "User": mila_username,
     },
     "cn-????": {
         "ProxyJump": "mila",
+        # "User": mila_username,
     },
 }
 DRAC_CLUSTERS = [

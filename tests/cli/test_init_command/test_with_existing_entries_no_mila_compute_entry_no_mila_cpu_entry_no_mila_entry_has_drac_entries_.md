@@ -33,7 +33,7 @@ leads to the following ssh config file:
 ```
 
 # Compute Canada
-Host beluga cedar graham narval niagara
+Host beluga cedar graham narval niagara rorqual fir nibi tamia killarney vulcan
   Hostname %h.alliancecan.ca
   User bob
   ControlMaster auto
@@ -82,5 +82,33 @@ Host mila-cpu
 Host *.server.mila.quebec !*login.server.mila.quebec
   HostName %h
   ProxyJump mila
+  User bob
+
+Host cn-????
+  ProxyJump mila
+  User bob
+
+Host rc????? rg????? rl?????
+  ProxyJump rorqual
+  User bob
+
+Host fc????? fb?????
+  ProxyJump fir
+  User bob
+
+Host c? c?? c??? g? g?? l? l?? m? m?? u?
+  ProxyJump nibi
+  User bob
+
+Host tg????? tc?????
+  ProxyJump tamia
+  User bob
+
+Host kn???
+  ProxyJump killarney
+  User bob
+
+Host rack??-??
+  ProxyJump vulcan
   User bob
 ```
