@@ -365,7 +365,7 @@ def test_updates_drac_login_node_entry(tmp_path: Path, monkeypatch: pytest.Monke
         assert new_cluster in all_drac_paice_clusters
 
     for line in resulting_contents.splitlines():
-        if line.strip().startswith("Host ") and "beluga" in line:
+        if line.strip().startswith("Host ") and " beluga" in line:
             assert set(line.strip().removeprefix("Host ").split()) >= set(DRAC_CLUSTERS)
 
 

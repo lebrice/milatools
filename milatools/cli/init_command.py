@@ -113,6 +113,7 @@ DRAC_ENTRIES: dict[str, dict[str, int | str]] = {
         "ProxyJump": "cedar",
         # User=drac_username,
     },
+    # TODO: Remove (cluster reached end-of-life).
     "!graham  gra??? gra????": {
         "ProxyJump": "graham",
         # User=drac_username,
@@ -163,13 +164,14 @@ def setup_ssh_config(
     Exits if the User cancels any of the prompts or doesn't confirm the changes when
     asked.
 
-    Entries:
+    Mila Entries:
     - "mila": Used to connect to a login node.
     - "mila-cpu": Used to connect to a compute node.
-
-    Other entries:
     - "*.server.mila.quebec !*login.server.mila.quebec": Sets some useful attributes for
       connecting directly to compute nodes.
+
+    DRAC Entries:
+    - beluga cedar graham narval niagara rorqual fir nibi tamia killarney vulcan
 
     Returns:
         The resulting SSHConfig if the changes are approved.
@@ -191,8 +193,23 @@ def setup_ssh_config(
         logger.debug(
             f"Adding entries for the ComputeCanada/DRAC clusters to {ssh_config_path}."
         )
-        for hostname, entry in DRAC_ENTRIES.copy().items():
-            entry.update(User=drac_username)
+        # TODO: Update an entry if it is already partially present in the config.
+        # 'Host beluga cedar narval' -> 'Host beluga cedar graham narval niagara rorqual fir nibi tamia killarney vulcan'
+
+        drac_login_nodes_host = " ".join(DRAC_CLUSTERS)
+        entry = DRAC_ENTRIES[drac_login_nodes_host]
+        for new_hostname, new_entry in DRAC_ENTRIES.items():
+            for host in ssh_config.hosts():
+                if set(host.split()) < set(new_hostname.split()):
+                    logger.info(
+                        f"Found existing DRAC entry for '{host}' in {ssh_config_path}. "
+                        f"Updating it to {new_hostname}."
+                    )
+                    ssh_config.rename(host, drac_login_nodes_host)
+                    break
+        # We perhaps renamed the "host" lines, now we add/update their contents.
+        for hostname, entry in DRAC_ENTRIES.items():
+            entry = entry | {"User": drac_username}
             _add_ssh_entry(ssh_config, hostname, entry)
             _make_controlpath_dir(entry)
 
