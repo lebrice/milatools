@@ -81,10 +81,26 @@ MILA_ENTRIES: dict[str, dict[str, int | str]] = {
         "ProxyJump": "mila",
         **ssh_multiplexing_config,
     },
+    "cn-????": {
+        "ProxyJump": "mila",
+        **ssh_multiplexing_config,
+    },
 }
-DRAC_CLUSTERS = ["beluga", "cedar", "graham", "narval"]
+DRAC_CLUSTERS = [
+    "beluga",
+    "cedar",
+    "graham",
+    "narval",
+    "niagara",
+    "rorqual",
+    "fir",
+    "nibi",
+    "tamia",
+    "killarney",
+    "vulcan",
+]
 DRAC_ENTRIES: dict[str, dict[str, int | str]] = {
-    "beluga cedar graham narval niagara": {
+    "beluga cedar graham narval niagara rorqual fir nibi tamia killarney vulcan": {
         "Hostname": "%h.alliancecan.ca",
         # User=drac_username,
         **ssh_multiplexing_config,
@@ -107,6 +123,32 @@ DRAC_ENTRIES: dict[str, dict[str, int | str]] = {
     },
     "!niagara nia????": {
         "ProxyJump": "niagara",
+        # User=drac_username,
+    },
+    ## New DRAC clusters: rorqual, fir, nibi
+    "rc????? rg????? rl?????": {
+        "ProxyJump": "rorqual",
+        # User=drac_username,
+    },
+    "fc????? fb?????": {
+        "ProxyJump": "fir",
+        # User=drac_username,
+    },
+    "c? c?? c??? g? g?? l? l?? m? m?? u?": {
+        "ProxyJump": "nibi",
+        # User=drac_username,
+    },
+    ## New PAICE clusters: tamia killarney vulcan
+    "tg????? tc?????": {
+        "ProxyJump": "tamia",
+        # User=drac_username,
+    },
+    "kn???": {
+        "ProxyJump": "killarney",
+        # User=drac_username,
+    },
+    "rack??-??": {
+        "ProxyJump": "vulcan",
         # User=drac_username,
     },
 }

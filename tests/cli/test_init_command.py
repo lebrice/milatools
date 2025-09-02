@@ -330,13 +330,11 @@ def test_fixes_overly_general_entry(
     )
 
 
-def test_updates_drac_login_node_entry(
-    tmp_path: Path,
-    input_pipe: PipeInput,
-    file_regression: FileRegressionFixture,
-):
-    """Test the case where the user already has a DRAC entry and we have new DRAC
-    clusters."""
+def test_updates_drac_login_node_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Test the case where the user already has an outdated entry for DRAC login nodes.
+
+    In this case we just add the missing clusters. We don't remove anything.
+    """
     ssh_config_path = tmp_path / ".ssh" / "config"
     ssh_config_path.parent.mkdir(parents=True, exist_ok=False)
     initial_contents = textwrap.dedent(
@@ -349,26 +347,28 @@ def test_updates_drac_login_node_entry(
     with open(ssh_config_path, "w") as f:
         f.write(initial_contents)
 
-    # Enter username, accept fixing that entry, then confirm.
-    for user_input in [
-        "n",  # mila account?
-        # TODO: Should we ask if the user has a DRAC account if there is already a partial DRAC config?
-        "y",  # DRAC account?
-        "bob\r",
-        "y",  # confirm?
-    ]:
-        input_pipe.send_text(user_input + "\n")
-
+    # yn is called in `_setup_ssh_config_file` to ask whether to create the file if it
+    # doesn't already exist.
+    monkeypatch.setattr(init_command, yn.__name__, Mock(return_value=True))
+    monkeypatch.setattr(
+        init_command, _get_mila_username.__name__, Mock(return_value=None)
+    )
+    monkeypatch.setattr(
+        init_command, _confirm_changes.__name__, Mock(return_value=True)
+    )
     setup_ssh_config(ssh_config_path=ssh_config_path)
 
     with open(ssh_config_path) as f:
         resulting_contents = f.read()
+    all_drac_paice_clusters = DRAC_CLUSTERS
+    for new_cluster in ["rorqual", "fir", "nibi", "tamia", "killarney", "vulcan"]:
+        assert new_cluster in all_drac_paice_clusters
 
-    file_regression.check(resulting_contents)
+    for line in resulting_contents.splitlines():
+        if line.strip().startswith("Host ") and "beluga" in line:
+            assert set(line.strip().removeprefix("Host ").split()) >= set(DRAC_CLUSTERS)
 
 
-# @pytest.fixture(scope="module")
-# def ssh_config_file
 def test_compute_node_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Check that SSH config entries for compute nodes have the right options.
 
@@ -406,6 +406,12 @@ def test_compute_node_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     # mila
     for letter in ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"]:
         number = random.randint(1, 999)
+        compute_node_entry = reader.lookup(
+            f"cn-{letter}{number:03d}.server.mila.quebec"
+        )
+        assert compute_node_entry.get("proxyjump") == "mila"
+        assert compute_node_entry.get("user") == mila_username
+
         compute_node_entry = reader.lookup(f"cn-{letter}{number:03d}")
         assert compute_node_entry.get("proxyjump") == "mila"
         assert compute_node_entry.get("user") == mila_username
@@ -416,7 +422,7 @@ def test_compute_node_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     for prefix in prefixes:
         number = random.randint(0, 10**n_digits - 1)
         compute_node_entry = reader.lookup(f"{prefix}{number:0{n_digits}d}")
-        assert compute_node_entry.get("proxyjump") == "narval"
+        assert compute_node_entry.get("proxyjump") == "beluga"
         assert compute_node_entry.get("user") == drac_username
 
     # cedar
